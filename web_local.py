@@ -7,6 +7,7 @@ import threading
 import time
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+from login_local import LoginManager
 
 
 def install(api, root, resolve):
@@ -15,6 +16,7 @@ def install(api, root, resolve):
     downloads.mkdir(exist_ok=True)
     lock = threading.Lock()
     original = api.Handler
+    login = LoginManager(root, api)
 
     class Handler(original):
         def end_headers(self):
@@ -43,12 +45,18 @@ def install(api, root, resolve):
                 super().do_GET()
 
         def do_POST(self):
-            if self.path not in {"/web/download", "/web/open-folder"}:
+            if self.path not in {"/web/download", "/web/open-folder", "/web/login/start", "/web/login/status"}:
                 return super().do_POST()
             if (not self.valid_host() or self.headers.get("Origin") not in
                     {"http://127.0.0.1:8787", "http://localhost:8787"} or
                     not secrets.compare_digest(self.headers.get("X-Local-Token", ""), token)):
                 self.send_json(403, {"error": "请求未授权，请刷新本机页面。"})
+                return
+            if self.path == "/web/login/start":
+                self.send_json(200, login.start())
+                return
+            if self.path == "/web/login/status":
+                self.send_json(200, login.status())
                 return
             if self.path == "/web/open-folder":
                 subprocess.run(["/usr/bin/open", str(downloads)], check=True)
